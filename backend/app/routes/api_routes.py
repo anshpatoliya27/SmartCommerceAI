@@ -424,3 +424,23 @@ def predict():
         return jsonify(result), 404
         
     return jsonify(result)
+
+# Mock routes for Homepage to prevent 404 crashes during auth testing
+@product_bp.route('/products', methods=['GET'])
+def get_products():
+    return jsonify({"products": [], "categories": [], "total": 0})
+
+@product_bp.route('/users', methods=['GET'])
+def get_users():
+    return jsonify({"users": []})
+
+@product_bp.route('/trending', methods=['GET'])
+def get_trending():
+    return jsonify({"trending": []})
+
+@product_bp.route('/dashboard', methods=['GET'])
+def get_dashboard():
+    return jsonify({
+        "total_products": 0, "total_events": 0, "total_users": 0,
+        "active_sessions": 0, "categories": [], "dataset_events": 0, "live_events": 0
+    })

@@ -1,9 +1,15 @@
 from app.models.category_reco_model import ProductEngine
 
-# Initialize the engine once
-engine = ProductEngine()
+engine = None
+try:
+    engine = ProductEngine()
+except Exception as e:
+    print(f"[WARNING] Skipping ProductEngine init due to missing model files: {e}")
 
 def handle_prediction(sku_id):
+    if engine is None:
+        return {"error": "Product AI models are currently missing or loading."}
+        
     # 1. Preprocess
     features, raw_data = engine.preprocess_from_sku(sku_id)
     
