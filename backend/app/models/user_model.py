@@ -32,3 +32,10 @@ def verify_user(email):
         {"email": email.lower()},
         {"$set": {"is_verified": True, "otp": None}}
     )
+
+# UPDATE PASSWORD
+def update_password(email, new_password):
+    return ext.db.users.update_one(
+        {"email": email.lower()},
+        {"$set": {"password": hash_password(new_password)}}
+    )
