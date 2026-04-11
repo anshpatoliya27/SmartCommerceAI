@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Link, useNavigate } from 'react-router-dom'
-import './App.css'
-import { useAuth } from './context/AuthContext'
-import HomePage from './pages/Homepage'
-import LoginPage from './pages/LoginPage'
-import SignupPage from './pages/SignupPage'
-import ProfilePage from './pages/ProfilePage'
-import CartPage from './pages/CartPage'
-import CheckoutPage from './pages/CheckoutPage'
-
+import './HomePage.css'
+import * as api from '../api'
+import { useAuth } from '../context/AuthContext'
+import { Navigate } from 'react-router-dom';
+import { getImageForProduct } from '../utils';
+import SearchBar from '../components/SearchBar';
+import Sidebar from '../components/Sidebar';
+import ProductCard from '../components/ProductCard';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -17,18 +16,6 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
-      <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-    </Routes>
-  )
-}
 
 function HomePage() {
   const { user, isAuthenticated, logout, cartCount, refreshCart } = useAuth()
@@ -64,7 +51,6 @@ function HomePage() {
   const [catalogCategories, setCatalogCategories] = useState([])
   const [selectedCatFilter, setSelectedCatFilter] = useState('')
   const [selectedSubcatFilter, setSelectedSubcatFilter] = useState('')
-  const [catalogSearch, setCatalogSearch] = useState('')
   const CATALOG_PAGE_SIZE = 20
 
   // ─── Load catalog products (paginated from product_catalog.csv) ───
@@ -76,7 +62,7 @@ function HomePage() {
         CATALOG_PAGE_SIZE,
         selectedCatFilter || null,
         selectedSubcatFilter || null,
-        catalogSearch || null
+        searchQuery || null
       )
       if (append) {
         setCatalogProducts(prev => [...prev, ...data.products])
@@ -92,7 +78,7 @@ function HomePage() {
     } finally {
       setCatalogLoading(false)
     }
-  }, [selectedCatFilter, selectedSubcatFilter, catalogSearch])
+  }, [selectedCatFilter, selectedSubcatFilter, searchQuery])
 
   const loadMoreCatalog = useCallback(() => {
     if (catalogHasMore && !catalogLoading) {
@@ -330,7 +316,12 @@ function HomePage() {
             </div>
           </Link>
 
-
+          <SearchBar
+            products={products}
+            onSelectProduct={handleProductClick}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+          />
 
           <div className="navbar-actions">
             {/* Cart Button */}
@@ -478,17 +469,10 @@ function HomePage() {
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
                 <span className="trending-rank">{item.trending_rank}</span>
-                <div className="trending-image" style={{height: '120px', marginBottom: '10px', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-secondary)'}}>
-                  <img
-                    src={item.image_url || item.img_url || getImageForProduct(item)}
-                    alt={item.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={(e) => { e.target.onerror = null; const s = parseInt(String(item.product_id).replace(/\D/g,'') || '1') % 10000; e.target.src = `https://picsum.photos/seed/${s}/400/400`; }}
-                  />
-                </div>
+                <div className="trending-image" style={{height: '120px', marginBottom: '10px', borderRadius: '8px', overflow: 'hidden'}}><img src={getImageForProduct(item)} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                 <div className="trending-name">{item.name}</div>
                 <div className="trending-views">{item.view_count} interactions</div>
-                <div className="trending-price">${item.base_price}</div>
+                <div className="trending-price">₹{item.base_price}</div>
               </div>
             ))}
           </div>
@@ -496,25 +480,11 @@ function HomePage() {
 
         {/* ─── PRODUCT CATALOG (from product_catalog.csv) ─── */}
         <section className="animate-in animate-in-delay-2" id="products-section">
-          <div className="section-header" style={{ flexWrap: 'wrap', gap: '20px' }}>
+          <div className="section-header">
             <div className="section-title">
               Product Catalog
-              <span className="section-badge">{catalogTotal.toLocaleString()} items</span>
             </div>
-            
-            <div className="catalog-search-wrapper">
-              <span className="catalog-search-icon">🔍</span>
-              <input 
-                type="text" 
-                className="catalog-search-input" 
-                placeholder="Search catalog... (e.g., Apple, Shoes)"
-                value={catalogSearch}
-                onChange={(e) => setCatalogSearch(e.target.value)}
-              />
-              {catalogSearch && (
-                <button className="catalog-search-clear" onClick={() => setCatalogSearch('')}>✕</button>
-              )}
-            </div>
+            <span className="section-badge">{catalogTotal.toLocaleString()} items</span>
           </div>
 
           {/* Category Filter Bar */}
@@ -522,11 +492,7 @@ function HomePage() {
             <select
               className="catalog-filter-select"
               value={selectedCatFilter}
-              onChange={(e) => {
-                setSelectedCatFilter(e.target.value);
-                setSelectedSubcatFilter('');
-                setCatalogPage(1);
-              }}
+              onChange={(e) => handleCatFilterChange(e.target.value)}
             >
               <option value="">All Categories</option>
               {catalogCategories.map(cat => (
@@ -537,13 +503,10 @@ function HomePage() {
               <select
                 className="catalog-filter-select"
                 value={selectedSubcatFilter}
-                onChange={(e) => {
-                  setSelectedSubcatFilter(e.target.value);
-                  setCatalogPage(1);
-                }}
+                onChange={(e) => handleSubcatFilterChange(e.target.value)}
               >
                 <option value="">All Subcategories</option>
-                {catalogCategories.find(c => c.name === selectedCatFilter)?.subcategories.map(sub => (
+                {(catalogCategories.find(c => c.name === selectedCatFilter)?.subcategories || []).map(sub => (
                   <option key={sub} value={sub}>{sub}</option>
                 ))}
               </select>
@@ -551,27 +514,26 @@ function HomePage() {
           </div>
 
           {/* Product Grid */}
-          <div className="product-grid catalog-grid" id="catalog-grid">
+          <div className="product-grid" id="product-grid">
             {catalogProducts.length > 0 ? (
               catalogProducts.map((product, i) => (
                 <div
-                  key={`${product.product_id}-${i}`}
+                  key={product.product_id}
                   className="product-card animate-in premium-card"
                   style={{ animationDelay: `${Math.min(i, 19) * 0.04}s` }}
                   onClick={() => handleProductClick(product)}
                   id={`product-${product.product_id}`}
                 >
-                  {/* Product Image from image_url */}
+                  {/* Product Image from img_url */}
                   <div className="product-card-image-wrapper">
                     <img
-                      src={product.image_url || product.img_url || product.image}
+                      src={product.img_url || product.image}
                       alt={product.name}
                       className="product-card-image loaded"
                       loading="lazy"
                       onError={(e) => {
                         e.target.onerror = null
-                        const seed = parseInt(product.product_id.replace(/\D/g, '') || '1') % 10000;
-                        e.target.src = `https://picsum.photos/seed/${seed}/400/400`
+                        e.target.src = `https://source.unsplash.com/400x400/?${encodeURIComponent(product.subcategory || product.category)},product`
                       }}
                     />
                   </div>
@@ -594,10 +556,10 @@ function HomePage() {
 
                     <div className="product-card-footer">
                       <div className="product-card-price">
-                        <span className="price-current">${product.base_price}</span>
+                        <span className="price-current">₹{product.base_price}</span>
                         {product.original_price && product.original_price > product.base_price && (
                           <div className="price-savings-row">
-                            <span className="price-base">${product.original_price}</span>
+                            <span className="price-base">₹{product.original_price}</span>
                             <span className="price-badge savings">
                               Save {Math.round(((product.original_price - product.base_price) / product.original_price) * 100)}%
                             </span>
@@ -723,7 +685,7 @@ function HomePage() {
                   {addingToCart === selectedProduct.product_id ? (
                     <><span className="btn-spinner-sm"></span> Adding...</>
                   ) : (
-                    <>Add to Cart — ${productPricing ? productPricing.final_price : selectedProduct.base_price}</>
+                    <>Add to Cart — ₹{productPricing ? productPricing.final_price : selectedProduct.base_price}</>
                   )}
                 </button>
               </div>
@@ -739,16 +701,16 @@ function HomePage() {
                 <>
                   <div className="pricing-header">
                     <div className="pricing-main">
-                      <span className="pricing-final">${productPricing.final_price}</span>
+                      <span className="pricing-final">₹{productPricing.final_price}</span>
                       {productPricing.final_price !== productPricing.base_price && (
-                        <span className="pricing-original">${productPricing.base_price}</span>
+                        <span className="pricing-original">₹{productPricing.base_price}</span>
                       )}
                     </div>
                     {productPricing.savings_percent !== 0 && (
                       <span className={`pricing-savings-badge ${productPricing.savings_percent > 0 ? 'saving' : 'increase'}`}>
                         {productPricing.savings_percent > 0
-                          ? `You save $${productPricing.total_savings} (${productPricing.savings_percent}%)`
-                          : `+$${Math.abs(productPricing.total_savings)} (${Math.abs(productPricing.savings_percent)}%)`
+                          ? `You save ₹${productPricing.total_savings} (${productPricing.savings_percent}%)`
+                          : `+₹${Math.abs(productPricing.total_savings)} (${Math.abs(productPricing.savings_percent)}%)`
                         }
                       </span>
                     )}
@@ -805,7 +767,7 @@ function HomePage() {
                           <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
                             <div className="rec-card-image" style={{ height: '100px', marginBottom: '12px', borderRadius: '8px', overflow: 'hidden' }}><img src={getImageForProduct(rec)} alt={rec.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                             <div className="rec-card-name">{rec.name}</div>
-                            <div className="rec-card-price">${rec.base_price}</div>
+                            <div className="rec-card-price">₹{rec.base_price}</div>
                           </div>
                         ))}
                       </div>
@@ -824,7 +786,7 @@ function HomePage() {
                           <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
                             <div className="rec-card-image" style={{ height: '100px', marginBottom: '12px', borderRadius: '8px', overflow: 'hidden' }}><img src={getImageForProduct(rec)} alt={rec.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                             <div className="rec-card-name">{rec.name}</div>
-                            <div className="rec-card-price">${rec.base_price}</div>
+                            <div className="rec-card-price">₹{rec.base_price}</div>
                           </div>
                         ))}
                       </div>
@@ -843,7 +805,7 @@ function HomePage() {
                           <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
                             <div className="rec-card-image" style={{ height: '100px', marginBottom: '12px', borderRadius: '8px', overflow: 'hidden' }}><img src={getImageForProduct(rec)} alt={rec.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                             <div className="rec-card-name">{rec.name}</div>
-                            <div className="rec-card-price">${rec.base_price}</div>
+                            <div className="rec-card-price">₹{rec.base_price}</div>
                           </div>
                         ))}
                       </div>
@@ -862,7 +824,7 @@ function HomePage() {
                           <div key={rec.product_id} className="rec-card" onClick={() => handleRecClick(rec)}>
                             <div className="rec-card-image" style={{ height: '100px', marginBottom: '12px', borderRadius: '8px', overflow: 'hidden' }}><img src={getImageForProduct(rec)} alt={rec.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
                             <div className="rec-card-name">{rec.name}</div>
-                            <div className="rec-card-price">${rec.base_price}</div>
+                            <div className="rec-card-price">₹{rec.base_price}</div>
                           </div>
                         ))}
                       </div>
@@ -883,4 +845,4 @@ function HomePage() {
   )
 }
 
-export default App
+export default HomePage;
