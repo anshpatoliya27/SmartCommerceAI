@@ -56,7 +56,7 @@ const VOUCHERS = [
     },
 ];
 
-function computeBestVoucher(items, cartTotal) {
+function computeBestVoucher(items, cartTotal, usedVouchers = []) {
     const hasElectronics = items.some(item => {
         const cat = (item.category || '').toLowerCase();
         return ['electronics', 'computers', 'smartphones', 'appliances'].some(e => cat.includes(e));
@@ -66,6 +66,7 @@ function computeBestVoucher(items, cartTotal) {
     let bestSavings = 0;
 
     for (const v of VOUCHERS) {
+        if (usedVouchers.includes(v.code)) continue;
         if (cartTotal < v.minCart) continue;
         if (v.categories && !hasElectronics) continue;
 
@@ -193,7 +194,7 @@ function EmptyCart() {
 
 /* ─── Main Component ─── */
 export default function CartPage() {
-    const { isAuthenticated, refreshCart } = useAuth();
+    const { user, isAuthenticated, refreshCart } = useAuth();
     const navigate = useNavigate();
 
     const [cart, setCart] = useState({ items: [], total: 0, item_count: 0 });
@@ -230,12 +231,19 @@ export default function CartPage() {
     /* Auto-apply best voucher when cart changes */
     useEffect(() => {
         if (cart.items.length > 0 && !voucherRemoved) {
-            const best = computeBestVoucher(cart.items, cart.total);
+            const usedVouchers = user?.used_vouchers || [];
+            const best = computeBestVoucher(cart.items, cart.total, usedVouchers);
             setBestVoucher(best);
-        } else if (cart.items.length === 0) {
+            if (best) {
+                localStorage.setItem('smartcommerce_voucher', JSON.stringify(best));
+            } else {
+                localStorage.removeItem('smartcommerce_voucher');
+            }
+        } else if (cart.items.length === 0 || voucherRemoved) {
             setBestVoucher(null);
+            localStorage.removeItem('smartcommerce_voucher');
         }
-    }, [cart, voucherRemoved]);
+    }, [cart, voucherRemoved, user]);
 
     const handleUpdateQty = async (productId, newQty) => {
         setUpdating(productId);
@@ -273,8 +281,14 @@ export default function CartPage() {
         setVoucherError('');
         const code = voucherInput.trim().toUpperCase();
         const found = VOUCHERS.find(v => v.code === code);
+        const usedVouchers = user?.used_vouchers || [];
+        
         if (!found) {
             setVoucherError('Invalid voucher code');
+            return;
+        }
+        if (usedVouchers.includes(found.code)) {
+            setVoucherError('This voucher has already been used on your account');
             return;
         }
         if (cart.total < found.minCart) {
@@ -287,7 +301,9 @@ export default function CartPage() {
         } else {
             savings = Math.min((cart.total * found.value) / 100, found.maxDiscount);
         }
-        setBestVoucher({ ...found, savings });
+        const applied = { ...found, savings };
+        setBestVoucher(applied);
+        localStorage.setItem('smartcommerce_voucher', JSON.stringify(applied));
         setVoucherRemoved(false);
         setVoucherInput('');
         showToast(`Voucher ${code} applied! You save ${formatPrice(savings, currency)}`);
@@ -374,7 +390,11 @@ export default function CartPage() {
                                     <VoucherBanner
                                         voucher={bestVoucher}
                                         currency={currency}
-                                        onRemove={() => { setBestVoucher(null); setVoucherRemoved(true); }}
+                                        onRemove={() => { 
+                                            setBestVoucher(null); 
+                                            setVoucherRemoved(true); 
+                                            localStorage.removeItem('smartcommerce_voucher');
+                                        }}
                                     />
                                 )}
                             </AnimatePresence>

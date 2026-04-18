@@ -160,11 +160,10 @@ export default function LoginPage() {
         setLoading(true); setError('');
         try {
             if (otp.length !== 6) throw new Error('Code must be 6 digits');
-            // Move to next step; validation happens on final submit.
-            // (A dedicated check-otp endpoint could be added, but passing the OTP to the final reset handles security).
+            await api.verifyResetOTP(email, otp);
             setView('new-password');
         } catch (err) {
-            setError(err.message || 'Invalid reset code format.');
+            setError(err.message || 'Invalid reset code.');
         } finally {
             setLoading(false);
         }

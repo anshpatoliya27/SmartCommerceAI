@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    strictPort: false,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
@@ -18,18 +19,20 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/orders': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
       '/add-to-cart': {
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
-      '/cart': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/orders': {
+      // Proxy /cart/<email>... API calls but NOT the bare /cart React page
+      '^/cart/.+': {
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },
   },
 })
+

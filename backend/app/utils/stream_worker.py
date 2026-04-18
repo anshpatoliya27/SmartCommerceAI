@@ -43,9 +43,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message
 # Config
 # ─────────────────────────────────────────────────────────────────────────────
 
-POLL_INTERVAL   = 0.2   # seconds between poll loops
+POLL_INTERVAL   = 5.0   # seconds between poll loops (increased when Redis is down)
 BATCH_SIZE      = 50    # messages per xreadgroup call
 WORKER_RUNNING  = True  # set False to stop the loop cleanly
+REDIS_AVAILABLE = False  # checked at startup; if False, worker sleeps quietly
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -221,32 +222,71 @@ STREAM_HANDLERS = {
 }
 
 
+def _check_redis_available() -> bool:
+    """Check if Redis is reachable. Returns True if available."""
+    try:
+        r = get_redis()
+        r.ping()
+        return True
+    except Exception:
+        return False
+
+
 def run_worker():
     """
     Blocking loop — call from a thread or separate process.
     Reads both streams in round-robin and processes each batch.
+    Gracefully degrades when Redis is unavailable (no error spam).
     """
-    global WORKER_RUNNING
+    global WORKER_RUNNING, REDIS_AVAILABLE
 
     logger.info("Stream worker starting up …")
 
-    # Ensure consumer groups exist for both streams
-    for stream_name in STREAM_HANDLERS:
-        try:
-            ensure_consumer_group(stream_name)
-        except Exception as e:
-            logger.error("Could not create consumer group for '%s': %s", stream_name, e)
+    # Check Redis availability once at startup
+    REDIS_AVAILABLE = _check_redis_available()
+    if not REDIS_AVAILABLE:
+        logger.warning("Redis is not available — stream processing is disabled. Core API features still work.")
+
+    # Ensure consumer groups if Redis is up
+    if REDIS_AVAILABLE:
+        for stream_name in STREAM_HANDLERS:
+            try:
+                ensure_consumer_group(stream_name)
+            except Exception as e:
+                logger.error("Could not create consumer group for '%s': %s", stream_name, e)
 
     logger.info("Stream worker ready — polling every %.1fs", POLL_INTERVAL)
 
+    _redis_recheck_interval = 60  # recheck Redis every 60 seconds
+    _last_recheck = time.time()
+
     while WORKER_RUNNING:
+        # Periodically recheck Redis so worker activates if Redis comes online later
+        if not REDIS_AVAILABLE and (time.time() - _last_recheck) > _redis_recheck_interval:
+            REDIS_AVAILABLE = _check_redis_available()
+            _last_recheck = time.time()
+            if REDIS_AVAILABLE:
+                logger.info("Redis is now available — stream processing enabled.")
+                for stream_name in STREAM_HANDLERS:
+                    try:
+                        ensure_consumer_group(stream_name)
+                    except Exception:
+                        pass
+
+        # If Redis is not available, sleep and skip processing silently
+        if not REDIS_AVAILABLE:
+            time.sleep(POLL_INTERVAL)
+            continue
+
         processed_any = False
 
         for stream_name, handler in STREAM_HANDLERS.items():
             try:
                 messages = xread_pending(stream_name, count=BATCH_SIZE)
-            except Exception as e:
-                logger.warning("xread_pending failed on '%s': %s", stream_name, e)
+            except Exception:
+                # Redis went down mid-run — mark unavailable and stop spamming
+                REDIS_AVAILABLE = False
+                _last_recheck = time.time()
                 messages = []
 
             for msg in messages:
@@ -260,7 +300,6 @@ def run_worker():
                         msg.get("id"), stream_name, e,
                     )
 
-        # Only sleep if both streams were empty — keeps latency low under load
         if not processed_any:
             time.sleep(POLL_INTERVAL)
 

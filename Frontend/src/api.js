@@ -21,7 +21,7 @@ async function fetchJSON(url, options = {}) {
         });
         if (!response.ok) {
             const errData = await response.json().catch(() => null);
-            throw new Error(errData?.message || `API Error: ${response.status} ${response.statusText}`);
+            throw new Error(errData?.message || errData?.error || `API Error: ${response.status} ${response.statusText}`);
         }
         return await response.json();
     } catch (error) {
@@ -57,6 +57,13 @@ export const verifyOTP = async (email, otp) => {
     });
 };
 
+export const verifyResetOTP = async (email, otp) => {
+    return fetchJSON(`${AUTH_BASE}/verify-reset-otp`, {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+    });
+};
+
 export const resendOTP = async (email) => {
     return fetchJSON(`${AUTH_BASE}/resend-otp`, {  // ← /auth/resend-otp
         method: 'POST',
@@ -65,7 +72,7 @@ export const resendOTP = async (email) => {
 };
 
 export const resetPassword = async (email, otp, newPassword) => {
-    return fetchJSON(`${API_BASE}/auth/reset-password`, {
+    return fetchJSON(`${AUTH_BASE}/reset-password`, {
         method: 'POST',
         body: JSON.stringify({ email, otp, new_password: newPassword }),
     });
@@ -255,7 +262,7 @@ export const getOrders = async () => {
     }
 };
 
-export const placeOrder = async (deliveryAddress, deliveryPhone) => {
+export const placeOrder = async (deliveryAddress, deliveryPhone, discount = 0, voucherCode = null, saveAddress = false) => {
     const user = JSON.parse(localStorage.getItem('smartcommerce_user') || '{}');
     const email = user?.email;
     console.log('[placeOrder] email:', email);
@@ -271,6 +278,9 @@ export const placeOrder = async (deliveryAddress, deliveryPhone) => {
             email,
             delivery_address: deliveryAddress,
             delivery_phone: deliveryPhone,
+            discount,
+            voucher_code: voucherCode,
+            save_address: saveAddress
         }),
     });
 

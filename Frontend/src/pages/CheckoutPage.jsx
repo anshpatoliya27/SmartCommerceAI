@@ -18,6 +18,7 @@ export default function CheckoutPage() {
         state: '',
         zipCode: '',
         phone: '',
+        saveAddress: true,
     });
     const navigate = useNavigate();
 
@@ -67,10 +68,24 @@ export default function CheckoutPage() {
             return;
         }
 
+        const savedVoucherStr = localStorage.getItem('smartcommerce_voucher');
+        let discount = 0;
+        let voucherCode = null;
+        if (savedVoucherStr) {
+            try {
+                const bestVoucher = JSON.parse(savedVoucherStr);
+                if (bestVoucher && bestVoucher.savings) {
+                    discount = bestVoucher.savings;
+                    voucherCode = bestVoucher.code;
+                }
+            } catch (e) {}
+        }
+
         setPlacing(true);
         try {
-            const data = await api.placeOrder(fullAddress, deliveryInfo.phone);
+            const data = await api.placeOrder(fullAddress, deliveryInfo.phone, discount, voucherCode, deliveryInfo.saveAddress);
             setOrderPlaced(data.order);
+            localStorage.removeItem('smartcommerce_voucher'); // Clear voucher
             await refreshCart();
             await refreshUser();
         } catch (err) {
@@ -106,64 +121,107 @@ export default function CheckoutPage() {
     // Order confirmed state
     if (orderPlaced) {
         return (
-            <div className="checkout-page">
-                <div className="checkout-container animate-in">
-                    <div className="order-success">
-                        <div className="success-animation">
-                            <div className="success-checkmark"></div>
+            <div className="checkout-page" style={{ padding: '60px 20px', background: '#f8fafc' }}>
+                <div className="checkout-container animate-in" style={{ maxWidth: '600px', margin: '0 auto' }}>
+                    <div className="order-success" style={{ textAlign: 'center', marginBottom: '32px' }}>
+                        <div style={{ width: '64px', height: '64px', background: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '32px', margin: '0 auto 16px' }}>
+                            ✓
                         </div>
-                        <h1 className="success-title">Order Placed Successfully!</h1>
-                        <p className="success-subtitle">Thank you for shopping with SmartCommerceAI</p>
+                        <h1 style={{ fontSize: '28px', color: '#0f172a', fontWeight: 700, marginBottom: '8px' }}>Order Confirmed</h1>
+                        <p style={{ color: '#64748b' }}>Thank you! Your order has been placed successfully.</p>
+                    </div>
 
-                        <div className="success-order-card">
-                            <div className="success-order-header">
+                    <div id="digital-receipt" style={{ background: '#fff', borderRadius: '16px', padding: '32px', boxShadow: '0 10px 40px -10px rgba(0,0,0,0.08)', position: 'relative', overflow: 'hidden' }}>
+                        {/* Receipt Header */}
+                        <div style={{ borderBottom: '1px dashed #cbd5e1', paddingBottom: '24px', marginBottom: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <div>
-                                    <div className="success-order-label">Order ID</div>
-                                    <div className="success-order-id">{orderPlaced.order_id}</div>
+                                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>SmartCommerceAI</div>
+                                    <div style={{ color: '#64748b', fontSize: '14px', marginTop: '4px' }}>Digital Receipt</div>
                                 </div>
-                                <div className="success-order-total">₹{orderPlaced.total.toFixed(2)}</div>
-                            </div>
-
-                            <div className="success-details">
-                                <div className="success-detail-row">
-                                    <span></span>
-                                    <span>Payment: <strong>{orderPlaced.payment_method}</strong></span>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '13px', color: '#64748b' }}>Order ID</div>
+                                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>{orderPlaced.order_id}</div>
                                 </div>
-                                <div className="success-detail-row">
-                                    <span></span>
-                                    <span>Delivery: <strong>{orderPlaced.delivery_address}</strong></span>
-                                </div>
-                                <div className="success-detail-row">
-                                    <span></span>
-                                    <span>Estimated: <strong>{orderPlaced.estimated_delivery}</strong></span>
-                                </div>
-                                <div className="success-detail-row">
-                                    <span></span>
-                                    <span>Phone: <strong>{orderPlaced.delivery_phone}</strong></span>
-                                </div>
-                            </div>
-
-                            <div className="success-items">
-                                {orderPlaced.items.map((item, i) => (
-                                    <div key={i} className="success-item">
-                                        <span>{item.image}</span>
-                                        <span>{item.name} × {item.quantity}</span>
-                                        <span>₹{(item.price * item.quantity).toFixed(2)}</span>
-                                    </div>
-                                ))}
                             </div>
                         </div>
 
-                        <div className="success-actions">
-                            <Link to="/" className="auth-submit-btn" style={{ textDecoration: 'none' }}>
-                                Continue Shopping
-                            </Link>
-                            <Link to="/profile" className="profile-edit-btn" style={{ textDecoration: 'none', textAlign: 'center' }}>
-                                View All Orders
-                            </Link>
+                        {/* Customer Details */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', borderBottom: '1px dashed #cbd5e1', paddingBottom: '24px', marginBottom: '24px' }}>
+                            <div>
+                                <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Billed To</div>
+                                <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 500 }}>{user?.name || 'Customer'}</div>
+                                <div style={{ fontSize: '14px', color: '#475569', lineHeight: 1.5, marginTop: '4px' }}>{orderPlaced.delivery_address}</div>
+                                <div style={{ fontSize: '14px', color: '#475569', marginTop: '4px' }}>{orderPlaced.delivery_phone}</div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Order Info</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: '#64748b', fontSize: '14px' }}>Date:</span> <span style={{ color: '#0f172a', fontSize: '14px', fontWeight: 500 }}>{new Date(orderPlaced.created_at).toLocaleDateString()}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><span style={{ color: '#64748b', fontSize: '14px' }}>Est. Delivery:</span> <span style={{ color: '#0f172a', fontSize: '14px', fontWeight: 500 }}>{orderPlaced.estimated_delivery}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b', fontSize: '14px' }}>Payment:</span> <span style={{ color: '#0f172a', fontSize: '14px', fontWeight: 500 }}>{orderPlaced.payment_method}</span></div>
+                            </div>
                         </div>
+
+                        {/* Items Table */}
+                        <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '16px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>
+                                <div style={{ flex: 2 }}>Item</div>
+                                <div style={{ flex: 1, textAlign: 'center' }}>Qty</div>
+                                <div style={{ flex: 1, textAlign: 'right' }}>Amount</div>
+                            </div>
+                            {orderPlaced.items.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '12px', color: '#0f172a' }}>
+                                    <div style={{ flex: 2, fontWeight: 500 }}>{item.name}</div>
+                                    <div style={{ flex: 1, textAlign: 'center', color: '#475569' }}>{item.quantity}</div>
+                                    <div style={{ flex: 1, textAlign: 'right', fontWeight: 600 }}>₹{(item.price * item.quantity).toFixed(2)}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Totals */}
+                        <div style={{ marginLeft: 'auto', width: '200px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#475569', marginBottom: '8px' }}>
+                                <span>Subtotal</span>
+                                <span style={{ fontWeight: 500, color: '#0f172a' }}>₹{(orderPlaced.total + (orderPlaced.discount || 0)).toFixed(2)}</span>
+                            </div>
+                            {orderPlaced.discount > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#10b981', marginBottom: '8px' }}>
+                                    <span>Discount</span>
+                                    <span style={{ fontWeight: 500 }}>-₹{orderPlaced.discount.toFixed(2)}</span>
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 700, color: '#0f172a', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                                <span>Total</span>
+                                <span>₹{orderPlaced.total.toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* Decor */}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '32px' }} className="no-print">
+                        <button 
+                            onClick={() => window.print()}
+                            style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', color: '#0f172a', padding: '14px', borderRadius: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                            onMouseOver={(e) => e.target.style.background = '#f8fafc'}
+                            onMouseOut={(e) => e.target.style.background = '#fff'}
+                        >
+                            Download Receipt
+                        </button>
+                        <Link to="/" style={{ flex: 1, background: '#111', color: '#fff', padding: '14px', borderRadius: '12px', fontWeight: 600, textDecoration: 'none', textAlign: 'center', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                            Continue Shopping
+                        </Link>
                     </div>
                 </div>
+
+                <style>{`
+                    @media print {
+                        body * { visibility: hidden; }
+                        #digital-receipt, #digital-receipt * { visibility: visible; }
+                        #digital-receipt { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; }
+                        .no-print { display: none !important; }
+                    }
+                `}</style>
             </div>
         );
     }
@@ -267,6 +325,16 @@ export default function CheckoutPage() {
                                     required
                                 />
                             </div>
+                            
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px', cursor: 'pointer' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={deliveryInfo.saveAddress}
+                                    onChange={(e) => setDeliveryInfo(prev => ({ ...prev, saveAddress: e.target.checked }))}
+                                    style={{ width: '16px', height: '16px', accentColor: '#111' }}
+                                />
+                                <span style={{ fontSize: '14px', color: '#4B5563', fontWeight: 500 }}>Save this address for future orders</span>
+                            </label>
                         </div>
 
                         {/* Payment Method */}
@@ -315,11 +383,29 @@ export default function CheckoutPage() {
                                 <span>Payment</span>
                                 <span>COD</span>
                             </div>
-                            <div className="cart-summary-divider"></div>
-                            <div className="cart-summary-row cart-summary-total">
-                                <span>Total</span>
-                                <span>₹{cart.total.toFixed(2)}</span>
-                            </div>
+                            {(() => {
+                                const savedVoucherStr = localStorage.getItem('smartcommerce_voucher');
+                                let discount = 0;
+                                if (savedVoucherStr) {
+                                    try { discount = JSON.parse(savedVoucherStr).savings || 0; } catch {}
+                                }
+                                const finalTotal = Math.max(0, cart.total - discount);
+                                return (
+                                    <>
+                                        {discount > 0 && (
+                                            <div className="cart-summary-row" style={{ color: '#10b981', fontWeight: 600 }}>
+                                                <span>Discount Applied</span>
+                                                <span>-₹{discount.toFixed(2)}</span>
+                                            </div>
+                                        )}
+                                        <div className="cart-summary-divider"></div>
+                                        <div className="cart-summary-row cart-summary-total">
+                                            <span>Total</span>
+                                            <span>₹{finalTotal.toFixed(2)}</span>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                             <button
                                 className="checkout-btn place-order-btn"
                                 onClick={handlePlaceOrder}
@@ -332,7 +418,7 @@ export default function CheckoutPage() {
                                         Placing Order...
                                     </>
                                 ) : (
-                                    <>Place Order — ₹{cart.total.toFixed(2)}</>
+                                    <>Place Order — ₹{Math.max(0, cart.total - (JSON.parse(localStorage.getItem('smartcommerce_voucher') || '{}').savings || 0)).toFixed(2)}</>
                                 )}
                             </button>
                             <div className="cod-notice">

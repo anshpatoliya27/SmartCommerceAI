@@ -14,7 +14,8 @@ from app.models.user_model import (
     create_user,
     find_user,
     verify_user,
-    verify_password
+    verify_password,
+    update_password
 )
 
 from app.utils.otp import generate_otp
@@ -116,6 +117,60 @@ def verify_otp():
     except Exception as e:
         print(f"[VERIFY OTP ERROR]\n{traceback.format_exc()}")
         return jsonify({"message": f"Verification failed: {str(e)}"}), 500
+
+
+# ═══════════════════════════════════════════════════════════════
+# 🔑 RESET PASSWORD
+# ═══════════════════════════════════════════════════════════════
+
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    try:
+        data = request.get_json(silent=True)
+
+        if not data or "email" not in data or "otp" not in data or "new_password" not in data:
+            return jsonify({"message": "Email, OTP and new password are required"}), 400
+
+        user = find_user(data["email"])
+
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+
+        if str(user.get("otp")) != str(data["otp"]):
+            return jsonify({"message": "Invalid OTP. Please try again."}), 400
+
+        update_password(data["email"], data["new_password"])
+        return jsonify({"message": "Password reset successfully"}), 200
+
+    except Exception as e:
+        print(f"[RESET PASSWORD ERROR]\n{traceback.format_exc()}")
+        return jsonify({"message": f"Password reset failed: {str(e)}"}), 500
+
+# ═══════════════════════════════════════════════════════════════
+# 🔑 VERIFY RESET OTP
+# ═══════════════════════════════════════════════════════════════
+
+@auth_bp.route("/verify-reset-otp", methods=["POST"])
+def verify_reset_otp():
+    try:
+        data = request.get_json(silent=True)
+
+        if not data or "email" not in data or "otp" not in data:
+            return jsonify({"message": "Email and OTP required"}), 400
+
+        user = find_user(data["email"])
+
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+
+        if str(user.get("otp")) != str(data["otp"]):
+            return jsonify({"message": "Invalid OTP. Please try again."}), 400
+
+        return jsonify({"message": "OTP is valid"}), 200
+
+    except Exception as e:
+        print(f"[VERIFY RESET OTP ERROR]\n{traceback.format_exc()}")
+        return jsonify({"message": f"OTP verification failed: {str(e)}"}), 500
 
 
 # ═══════════════════════════════════════════════════════════════

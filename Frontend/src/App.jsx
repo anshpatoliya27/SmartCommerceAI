@@ -8,6 +8,7 @@ import SignupPage from './pages/SignupPage'
 import ProfilePage from './pages/ProfilePage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
+import OrdersPage from './pages/OrdersPage'
 
 /* ═══════════════════════════════════════════════════════════════
    SmartCommerceAI — Main Application
@@ -35,6 +36,7 @@ function App() {
       <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
+      <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
     </Routes>
   )
 }
@@ -381,7 +383,7 @@ function HomePage() {
                     <Link to="/cart" className="dropdown-item" id="dropdown-cart">
                       <span>🛒</span> My Cart {cartCount > 0 && `(${cartCount})`}
                     </Link>
-                    <Link to="/profile" className="dropdown-item" id="dropdown-orders" onClick={() => {}}>
+                    <Link to="/orders" className="dropdown-item" id="dropdown-orders">
                       <span>📦</span> My Orders
                     </Link>
                     <div className="dropdown-divider"></div>
