@@ -1,3 +1,5 @@
+import email
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -16,6 +18,7 @@ from app.routes.api_routes import api_bp
 
 # ✅ From first file
 from app.routes.pricing_routes import pricing_bp
+from app.routes.admin_routes import admin_bp
 from app.utils.stream_worker import start_worker_thread, stop_worker
 from app.redis_client import get_redis
 from app.extensions import client as mongo_client
@@ -188,6 +191,7 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(api_bp)
     app.register_blueprint(pricing_bp)
+    app.register_blueprint(admin_bp)
 
     # ── Basic Routes ────────────────────────
     @app.route("/")
@@ -320,16 +324,18 @@ def create_app():
     # 📦 ORDER SYSTEM
     # ════════════════════════════════════════
 
+    # Inside create_app() in main.py
+
     @app.route("/orders", methods=["POST"])
     def place_order():
         payload = request.get_json(force=True)
-
         email = payload.get("email")
 
         if not email:
             return jsonify({"error": "Email required"}), 400
 
-        cart_items = list(cart_collection.find({"email": email}, {"_id": 0}))
+        # Match the collection name defined at the top of create_app
+        cart_items = list(cart_collection.find({"email": email}))
 
         if not cart_items:
             return jsonify({"error": "Cart empty"}), 400
@@ -338,15 +344,12 @@ def create_app():
         items = []
 
         for item in cart_items:
-            price = (
-                item.get("pricing", {}).get("best_price")
-                or item.get("pricing", {}).get("base_price")
-                or 0
-            )
+            # Logic to pick the best available price
+            pricing = item.get("pricing", {})
+            price = pricing.get("best_price") or pricing.get("base_price") or 0
             qty = item.get("quantity", 1)
 
             total += price * qty
-
             items.append({
                 "product_id": item.get("product_id"),
                 "name": item.get("name"),
@@ -363,16 +366,10 @@ def create_app():
         final_total = max(0, total - discount)
 
         order = {
-            "order_id": f"ORD-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            "order_id": f"ORD-{datetime.now().strftime('%Y%m%d%H%M%S')}",
             "email": email,
             "items": items,
-            "total": final_total,
-            "discount": discount,
-            "voucher_code": voucher_code,
-            "delivery_address": delivery_address,
-            "delivery_phone": delivery_phone,
-            "payment_method": "Cash on Delivery",
-            "estimated_delivery": (datetime.utcnow() + timedelta(days=3)).strftime("%d %b %Y"),
+            "total": total,
             "created_at": datetime.utcnow().isoformat(),
         }
 
@@ -402,12 +399,16 @@ def create_app():
         import threading
         threading.Thread(target=send_receipt_email, args=(order, email), daemon=True).start()
 
+        # Convert ObjectId for the response
+        order["_id"] = str(order["_id"])
         return jsonify({"order": order}), 201
-
 
     @app.route("/orders/<email>", methods=["GET"])
     def get_orders(email):
-        orders = list(orders_collection.find({"email": email}, {"_id": 0}))
+        # Ensure IDs are strings so React can use them as keys
+        orders = list(orders_collection.find({"email": email}))
+        for o in orders:
+            o["_id"] = str(o["_id"])
         return jsonify({"orders": orders})
 
 

@@ -9,6 +9,7 @@ import ProfilePage from './pages/ProfilePage'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrdersPage from './pages/OrdersPage'
+import AdminPage from './pages/AdminDashboard'
 
 /* ═══════════════════════════════════════════════════════════════
    SmartCommerceAI — Main Application
@@ -37,6 +38,7 @@ function App() {
       <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
       <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
     </Routes>
   )
 }
